@@ -125,7 +125,7 @@ def test_load_model_bundle_by_id(eta_model_id):
     bundle = load_model_bundle(session, model_id=eta_model_id)
     assert bundle.model_name == "eta"
     assert bundle.model_id == eta_model_id
-    assert "age_since_release_s" in bundle.feature_columns
+    assert "task_age_s" in bundle.feature_columns
 
 
 def test_load_model_bundle_unknown_id_raises():
@@ -139,36 +139,27 @@ def test_load_model_bundle_requires_exactly_one_source():
         load_model_bundle(None, model_id=None, model_path=None)
 
 
-def test_predict_eta_snapshot_shape_and_nonnegative(eta_model_id, inference_run_ids):
+def test_predict_eta_snapshot_documented_not_implemented(eta_model_id, inference_run_ids):
+    """Live single-tick inference is a documented, known gap (see
+    models/inference.py's module docstring) since the dataset builders
+    moved to the frozen feature schema, which needs historical/rolling
+    state a single tick can't provide. This asserts the gap fails loud
+    and explained, not silently wrong -- not that the feature works."""
     session = make_session_factory(DSN)()
     bundle = load_model_bundle(session, model_id=eta_model_id)
-    df = predict_eta_snapshot(session, bundle, inference_run_ids[0])
-    assert len(df) > 0
-    assert "predicted_remaining_time_s" in df.columns
-    assert (df["predicted_remaining_time_s"] >= 0).all()  # clipped, never negative
+    with pytest.raises(NotImplementedError, match="frozen dataset-builder feature schema"):
+        predict_eta_snapshot(session, bundle, inference_run_ids[0])
 
 
-def test_predict_eta_snapshot_at_tick_matches_requested_time(eta_model_id, inference_run_ids):
-    session = make_session_factory(DSN)()
-    bundle = load_model_bundle(session, model_id=eta_model_id)
-    # tick 50 -> simulation_time 5.0 at dt=0.1
-    df = predict_eta_snapshot(session, bundle, inference_run_ids[0], at_tick=50)
-    assert len(df) > 0
-    assert (df["simulation_time"] == 5.0).all()
-
-
-def test_predict_conflict_snapshot_shape_and_probability_range(conflict_model_id, inference_run_ids):
+def test_predict_conflict_snapshot_documented_not_implemented(conflict_model_id, inference_run_ids):
     session = make_session_factory(DSN)()
     bundle = load_model_bundle(session, model_id=conflict_model_id)
-    df = predict_conflict_snapshot(session, bundle, inference_run_ids[0], pair_radius_m=15.0)
-    assert len(df) > 0
-    assert (df["predicted_conflict_probability"] >= 0).all() and (df["predicted_conflict_probability"] <= 1).all()
-    assert set(df["predicted_conflict"].unique()) <= {True, False}
+    with pytest.raises(NotImplementedError, match="frozen dataset-builder feature schema"):
+        predict_conflict_snapshot(session, bundle, inference_run_ids[0], pair_radius_m=15.0)
 
 
-def test_predict_congestion_snapshot_shape_and_probability_range(congestion_model_id, inference_run_ids):
+def test_predict_congestion_snapshot_documented_not_implemented(congestion_model_id, inference_run_ids):
     session = make_session_factory(DSN)()
     bundle = load_model_bundle(session, model_id=congestion_model_id)
-    df = predict_congestion_snapshot(session, bundle, inference_run_ids[0])
-    assert len(df) > 0
-    assert (df["predicted_congestion_probability"] >= 0).all() and (df["predicted_congestion_probability"] <= 1).all()
+    with pytest.raises(NotImplementedError, match="frozen dataset-builder feature schema"):
+        predict_congestion_snapshot(session, bundle, inference_run_ids[0])

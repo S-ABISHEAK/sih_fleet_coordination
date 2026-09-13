@@ -108,7 +108,7 @@ def test_congestion_dataset_no_future_leakage(dataset_run_id, tmp_path):
     df = pd.read_parquet(result.output_path)
     assert len(df) == result.n_rows
     assert set(df["label_congestion_within_horizon"].unique()) <= {True, False}
-    assert (df["occupancy_count"] >= 1).all()
+    assert (df["edge_occupancy_count"] >= 1).all()
 
     # Reconstruct the label independently from raw edge_state_ts and confirm
     # it never depends on anything at or before the observation's own tick
@@ -139,4 +139,4 @@ def test_conflict_dataset_no_future_leakage(dataset_run_id, tmp_path):
 
     df = pd.read_parquet(result.output_path)
     assert set(df["label_conflict_within_horizon"].unique()) <= {True, False}
-    assert (df["distance_m"] >= 0).all()
+    assert (df["relative_distance_m"] >= 0).all()

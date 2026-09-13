@@ -1,14 +1,15 @@
 """Baseline Task-ETA regressor, trained on ``datasets/eta_builder.py``'s
 output. Deliberately a simple, well-understood baseline (gradient-boosted
-trees over a handful of hand-picked features) — the point of this pass is
+trees over the frozen ETA feature schema) — the point of this pass is
 proving the full data->model loop works end to end and is honestly
 evaluated on a held-out *set of runs* the model never trained on, not
 squeezing out state-of-the-art accuracy.
 
-Feature selection excludes ``run_id``/``robot_id``/``task_id`` (identifiers
-that don't generalize to a new run) even though the dataset's schema
-sidecar lists them as "feature_columns" — those columns exist there for
-traceability/joins, not because they're informative for the model.
+Feature list is imported directly from ``eta_builder.FEATURE_COLUMNS``
+(the frozen 21-feature schema, minus battery_voltage/payload_mass_kg —
+see that module's docstring) rather than hardcoded here a second time,
+so this can never silently drift out of sync with what the dataset
+builder actually produces.
 """
 from __future__ import annotations
 
@@ -21,12 +22,25 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sqlalchemy.orm import Session
 
+from fleetnet_sim.datasets.eta_builder import FEATURE_COLUMNS
 from fleetnet_sim.models.common import TrainResult, load_split_dataset, save_trained_model
 
-NUMERIC_FEATURES = ["age_since_release_s", "x", "y", "speed", "remaining_distance_m", "replan_count", "local_density", "priority"]
-CATEGORICAL_FEATURES = ["task_type", "source_zone_id", "destination_zone_id"]
-FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
+# source_zone_type/destination_zone_type are zone-type category strings
+# (one-hot appropriate); everything else in the frozen schema is already
+# numeric (task_type_encoded included -- a raw label encoding, not the
+# same thing as one-hot on the raw task_type string, so task_type itself
+# is intentionally excluded here to avoid redundant/leaking double
+# encoding of the same information).
+CATEGORICAL_FEATURES = ["source_zone_type", "destination_zone_type"]
+NUMERIC_FEATURES = [c for c in FEATURE_COLUMNS if c not in CATEGORICAL_FEATURES]
 LABEL_COLUMN = "label_remaining_time_s"
+
+
+def _prep(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df[NUMERIC_FEATURES] = df[NUMERIC_FEATURES].fillna(0)
+    df[CATEGORICAL_FEATURES] = df[CATEGORICAL_FEATURES].fillna("unknown")
+    return df
 
 
 def _build_pipeline() -> Pipeline:
@@ -52,13 +66,14 @@ def _evaluate(pipeline: Pipeline, df: pd.DataFrame) -> dict:
 
 def train_eta_model(session: Session, dataset_path: str, output_dir: str, dataset_id: str | None = None) -> TrainResult:
     splits = load_split_dataset(dataset_path)
+    train, val, test = _prep(splits["train"]), _prep(splits["val"]), _prep(splits["test"])
     pipeline = _build_pipeline()
-    pipeline.fit(splits["train"][FEATURE_COLUMNS], splits["train"][LABEL_COLUMN])
+    pipeline.fit(train[FEATURE_COLUMNS], train[LABEL_COLUMN])
 
     metrics = {
-        "train": _evaluate(pipeline, splits["train"]),
-        "val": _evaluate(pipeline, splits["val"]),
-        "test": _evaluate(pipeline, splits["test"]),
+        "train": _evaluate(pipeline, train),
+        "val": _evaluate(pipeline, val),
+        "test": _evaluate(pipeline, test),
     }
 
     return save_trained_model(
