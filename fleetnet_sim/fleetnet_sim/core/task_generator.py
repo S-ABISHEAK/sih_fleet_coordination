@@ -64,8 +64,13 @@ class TaskGenerator:
             return None
         return self._make_task(sim_time)
 
+    def _cells_for(self, zone_type: str) -> set:
+        if zone_type == "picking" and self.bridge.rack_aisle_cells:
+            return self.bridge.rack_aisle_cells
+        return self.bridge.zone_to_cells.get(zone_type, set())
+
     def _pick_cell(self, zone_type: str) -> Cell:
-        cells = self.bridge.zone_to_cells.get(zone_type)
+        cells = self._cells_for(zone_type)
         if not cells:
             raise ValueError(f"zone_type {zone_type!r} has no walkable cells in this layout")
         cells_list = list(cells)
@@ -74,7 +79,7 @@ class TaskGenerator:
 
     def _make_task(self, sim_time: float) -> tuple[Task, TaskRecord]:
         weights = np.array([w for _, _, w in FLOW_EDGES], dtype=float)
-        edges_available = [(s, d) for s, d, _ in FLOW_EDGES if self.bridge.zone_to_cells.get(s) and self.bridge.zone_to_cells.get(d)]
+        edges_available = [(s, d) for s, d, _ in FLOW_EDGES if self._cells_for(s) and self._cells_for(d)]
         if not edges_available:
             raise ValueError("no flow edge has both source and destination zones present in this layout")
         weights = weights[: len(edges_available)]

@@ -97,7 +97,8 @@ function drawLayout(ctx, layoutJson, transform, opts = {}) {
 
   for (const aisle of geo.aisles || []) {
     const role = aisle.metadata?.archetype_role;
-    drawPoly(ctx, aisle.points, transform, AISLE_COLORS[role] || AISLE_FALLBACK, null, 0.5);
+    const aisleColor = AISLE_COLORS[role] || AISLE_FALLBACK;
+    drawPoly(ctx, aisle.points, transform, aisleColor, aisleColor, 0.7, 1);
   }
   for (const zone of geo.zones || []) {
     const zt = zone.metadata?.zone_type;

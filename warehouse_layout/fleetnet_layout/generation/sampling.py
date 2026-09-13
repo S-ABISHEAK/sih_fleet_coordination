@@ -119,6 +119,25 @@ def sample_config(seed: int, overrides: SamplingOverrides | None = None) -> Layo
     band = SCALE_BANDS[scale_class]
 
     footprint_area = log_normal_in_range(rng, *band.area_m2)
+
+    # Aisle/block counts are otherwise sampled from a fixed per-scale-class
+    # range regardless of where footprint_area actually landed within that
+    # class's own area_m2 span -- a very_large warehouse at 250,000 m² would
+    # get the same aisle population as one at 100,000 m², just stretched
+    # thinner/longer. Scale the count ranges by sqrt(area / band-geometric-
+    # mean) (aisle *density* ~ linear dimension ~ sqrt(area)), clamped to a
+    # safe +/-70% band so this never pushes counts outside validated
+    # territory.
+    band_area_mid = (band.area_m2[0] * band.area_m2[1]) ** 0.5
+    area_scale = float(np.clip((footprint_area / band_area_mid) ** 0.5, 0.6, 1.7))
+
+    def _scaled_range(count_range: tuple[int, int], min_low: int = 1) -> tuple[int, int]:
+        lo, hi = count_range
+        return max(min_low, round(lo * area_scale)), max(min_low + 1, round(hi * area_scale))
+
+    scaled_block_count = _scaled_range(band.block_count)
+    scaled_aisle_count = _scaled_range(band.aisle_count, min_low=2)
+
     aspect = truncated_normal(rng, 1.1, 2.2, mean=1.5, rel_sigma=0.25)
     width_m = float(np.sqrt(footprint_area / aspect))
     length_m = footprint_area / width_m
@@ -147,10 +166,10 @@ def sample_config(seed: int, overrides: SamplingOverrides | None = None) -> Layo
     # Beta mode can sit very high; clamp to a sane build envelope.
     storage_density = float(np.clip(storage_density, 0.1, 0.75))
 
-    block_count = poisson_in_range(rng, *band.block_count)
+    block_count = poisson_in_range(rng, *scaled_block_count)
     rack_row_count = poisson_in_range(
-        rng, max(block_count, 2), max(band.aisle_count[1] // 2, block_count + 2),
-        mean=band.aisle_count[0] * 0.6,
+        rng, max(block_count, 2), max(scaled_aisle_count[1] // 2, block_count + 2),
+        mean=scaled_aisle_count[0] * 0.6,
     )
     rack_type = _INDUSTRY_RACK_TYPE.get(industry, RackType.SELECTIVE)
     rack_orientation = weighted_categorical(
@@ -164,8 +183,14 @@ def sample_config(seed: int, overrides: SamplingOverrides | None = None) -> Layo
         storage_density=round(storage_density, 3),
     )
 
-    main_count = max(1, poisson_in_range(rng, 1, max(2, band.aisle_count[0] // 5), mean=2))
-    secondary_count = poisson_in_range(rng, *band.aisle_count, mean=(band.aisle_count[0] + band.aisle_count[1]) / 2)
+    # main_count's mean=2 is deliberately left unscaled here: main aisles are
+    # physically wider load-bearing corridors, and bumping the Poisson mean
+    # is a separate, higher-risk behavioral change not needed to fix aisle
+    # density -- only its upper bound scales via scaled_aisle_count[0].
+    main_count = max(1, poisson_in_range(rng, 1, max(2, scaled_aisle_count[0] // 5), mean=2))
+    secondary_count = poisson_in_range(
+        rng, *scaled_aisle_count, mean=(scaled_aisle_count[0] + scaled_aisle_count[1]) / 2
+    )
     main_width_class = _sample_aisle_width_class(
         rng, industry, [AisleWidthClass.STANDARD, AisleWidthClass.WIDE], base_weight=1.0
     )

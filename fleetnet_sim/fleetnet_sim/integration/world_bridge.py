@@ -51,6 +51,7 @@ class WorldBridge:
     _edge_tree: STRtree = field(repr=False)
     _edge_ids_by_tree_index: list[tuple[str, str]] = field(repr=False)  # (u, v) node id pairs
     cell_to_zone: dict[Cell, str] = field(default_factory=dict)  # reverse of zone_to_cells, for occupancy telemetry
+    rack_aisle_cells: set[Cell] = field(default_factory=set)  # secondary/feeder aisle cells -- shelf-adjacent, unlike zone_to_cells["picking"]'s flat dock-wall strip
 
     def world_to_cell(self, x: float, y: float) -> Cell:
         return (int((x - self.origin_x) / self.cell_size), int((y - self.origin_y) / self.cell_size))
@@ -207,6 +208,25 @@ def build_world_bridge(layout: dict) -> WorldBridge:
         for cell in cells:
             cell_to_zone[cell] = zt
     bridge.cell_to_zone = cell_to_zone
+
+    rack_aisle_cells: set[Cell] = set()
+    for aisle in layout["geometry"]["aisles"]:
+        role = aisle["metadata"].get("archetype_role")
+        if role not in ("secondary", "feeder"):
+            continue
+        poly = _polygon_from_points(aisle["points"])
+        minx, miny, maxx, maxy = poly.bounds
+        cx0 = max(0, int((minx - origin_x) / cell_size))
+        cy0 = max(0, int((miny - origin_y) / cell_size))
+        cx1 = min(grid_w - 1, int((maxx - origin_x) / cell_size))
+        cy1 = min(grid_h - 1, int((maxy - origin_y) / cell_size))
+        for cx in range(cx0, cx1 + 1):
+            for cy in range(cy0, cy1 + 1):
+                wx = origin_x + (cx + 0.5) * cell_size
+                wy = origin_y + (cy + 0.5) * cell_size
+                if poly.contains(Point(wx, wy)) and world.is_free((cx, cy)):
+                    rack_aisle_cells.add((cx, cy))
+    bridge.rack_aisle_cells = rack_aisle_cells
 
     dock_role_to_zone = {}
     for dock in layout["geometry"]["docks"]:
