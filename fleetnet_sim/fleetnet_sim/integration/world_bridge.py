@@ -111,6 +111,39 @@ class WorldBridge:
                 break
         return start  # give up gracefully; caller may still fail to route, which is a validity signal
 
+    def nearest_non_aisle_cell(self, start: Cell, max_radius_cells: int = 15) -> Cell:
+        """BFS outward from ``start`` over free cells until one *outside*
+        ``rack_aisle_cells`` is found.
+
+        Used to nudge a robot that just went IDLE out of a narrow rack
+        aisle: a robot with no queued task simply stops wherever it is
+        (``core/engine.py``'s task FSM), and since picking pickup/dropoff
+        cells now route into ``rack_aisle_cells`` (shelf-adjacent, often
+        only 1-2 cells wide), a robot parking there can block the entire
+        aisle for anyone else. Only walks already-free cells (``World.
+        neighbors``), unlike ``nearest_free_cell``'s raw-adjacency walk,
+        since the start cell here is always free -- it's the *aisle*
+        membership, not free/obstacle status, being searched away
+        from."""
+        if start not in self.rack_aisle_cells:
+            return start
+        seen = {start}
+        frontier = [start]
+        for _ in range(max_radius_cells):
+            next_frontier = []
+            for cell in frontier:
+                for n in self.world.neighbors(cell):
+                    if n in seen:
+                        continue
+                    seen.add(n)
+                    if n not in self.rack_aisle_cells:
+                        return n
+                    next_frontier.append(n)
+            frontier = next_frontier
+            if not frontier:
+                break
+        return start  # give up gracefully -- robot stays put, same as nearest_free_cell
+
 
 def build_world_bridge(layout: dict) -> WorldBridge:
     footprint_pts = layout["geometry"]["footprint"]
@@ -179,9 +212,16 @@ def build_world_bridge(layout: dict) -> WorldBridge:
 
     bridge = _bridge_stub()
 
+    # Scale the BFS search radius with the grid: the 40-cell (40 m)
+    # default is fine for small/medium layouts, but a VERY_LARGE
+    # layout's rack blocks can span hundreds of meters, so a node deep
+    # inside one could have no free cell within the default radius and
+    # nearest_free_cell would silently give up and return an obstacle
+    # cell (see its docstring).
+    search_radius = max(40, (grid_w + grid_h) // 8)
     node_to_cell: dict[str, Cell] = {}
     for nid, (x, y) in node_positions.items():
-        node_to_cell[nid] = bridge.nearest_free_cell(x, y)
+        node_to_cell[nid] = bridge.nearest_free_cell(x, y, max_radius_cells=search_radius)
     bridge.node_to_cell = node_to_cell
 
     zone_to_cells: dict[str, set[Cell]] = {}

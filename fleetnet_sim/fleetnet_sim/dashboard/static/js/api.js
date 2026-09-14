@@ -60,4 +60,36 @@ const Api = {
     if (!r.ok) throw new Error(`generateStatus(${jobId}) failed: ${r.status}`);
     return r.json();
   },
+  async listDatasets() {
+    const r = await fetch("/api/datasets");
+    if (!r.ok) throw new Error(`listDatasets failed: ${r.status}`);
+    return (await r.json()).datasets;
+  },
+  async getDataset(datasetId) {
+    const r = await fetch(`/api/datasets/${encodeURIComponent(datasetId)}`);
+    if (!r.ok) throw new Error(`getDataset(${datasetId}) failed: ${r.status}`);
+    return r.json();
+  },
+  async getDatasetRows(datasetId, offset = 0, limit = 200, split = "") {
+    const params = new URLSearchParams({ offset, limit });
+    if (split) params.set("split", split);
+    const r = await fetch(`/api/datasets/${encodeURIComponent(datasetId)}/rows?${params}`);
+    if (!r.ok) throw new Error(`getDatasetRows(${datasetId}) failed: ${r.status}`);
+    return r.json();
+  },
+  async exportDataset(runIds) {
+    const r = await fetch("/api/datasets/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ run_ids: runIds }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || `exportDataset failed: ${r.status}`);
+    return data;
+  },
+  async exportDatasetStatus(jobId) {
+    const r = await fetch(`/api/datasets/export/${encodeURIComponent(jobId)}/status`);
+    if (!r.ok) throw new Error(`exportDatasetStatus(${jobId}) failed: ${r.status}`);
+    return r.json();
+  },
 };

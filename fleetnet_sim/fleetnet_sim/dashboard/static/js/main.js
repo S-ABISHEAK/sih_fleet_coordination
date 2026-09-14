@@ -4,6 +4,7 @@ const Main = {
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.toggle("active", p.id === `tab-${name}`));
     if (name === "runs") RunHistory.refresh();
+    if (name === "datasets") DatasetBrowser.refresh();
   },
 };
 
@@ -26,6 +27,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   LaunchForm.init();
   LayoutCreate.init();
+  DatasetBrowser.init();
   await LayoutBrowser.init();
   await RunHistory.init();
 });

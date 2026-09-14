@@ -1,6 +1,13 @@
+import pytest
+from fleetnet_layout.config.enums import Archetype, ScaleClass
+from fleetnet_layout.generation.generator import generate_layout
+from fleetnet_layout.generation.sampling import SamplingOverrides
+from fleetnet_layout.serialization.json_io import to_json_dict
+
 from fleetnet_sim.config.schema import ExperimentConfig, FleetConfig, SimulationConfig, TaskGenConfig, WarehouseConfig
 from fleetnet_sim.core.engine import Engine
 from fleetnet_sim.core.robot_agent import TaskState
+from fleetnet_sim.integration.world_bridge import build_world_bridge
 
 
 def _config(seed=1, robots=4, duration=30.0, arrival=0.5):
@@ -12,6 +19,105 @@ def _config(seed=1, robots=4, duration=30.0, arrival=0.5):
         fleet=FleetConfig(robot_count=robots),
         tasks=TaskGenConfig(arrival_rate_per_s=arrival),
     )
+
+
+@pytest.fixture(scope="module")
+def medium_grid_bridge():
+    layout = generate_layout(7, SamplingOverrides(archetype=Archetype.GRID, scale_class=ScaleClass.MEDIUM))
+    data = to_json_dict(layout.config, layout.result, layout.graph, layout.metrics, layout.validation)
+    return build_world_bridge(data)
+
+
+@pytest.fixture(scope="module")
+def large_grid_bridge():
+    layout = generate_layout(11, SamplingOverrides(archetype=Archetype.GRID, scale_class=ScaleClass.LARGE))
+    data = to_json_dict(layout.config, layout.result, layout.graph, layout.metrics, layout.validation)
+    return build_world_bridge(data)
+
+
+def test_cbba_task_assignment_does_not_starve_on_large_layouts(large_grid_bridge):
+    """Regression guard for a real, DB-confirmed bug: on a LARGE layout
+    with 25 robots (arrival_rate_per_s=0.5, 400s), 187 tasks were
+    created but only 8 were ever assigned (7 completed) -- 180 sat in
+    'pending' forever, and 17/25 robots never moved at all. Root cause:
+    Fleet_SIH's CBBA (core/allocation/cbba.py::try_build_bundle) only
+    accepts a task if score > current_best_bid (default 0.0), and for
+    an idle robot score = reward - (dist(robot,pickup) +
+    dist(pickup,dropoff)) -- a flat reward far smaller than the
+    warehouse's own diagonal (as the LARGE default is) scores <= 0 for
+    every single agent, so the task is silently, permanently unwinnable
+    (no exception, no algorithm_event). Fixed in task_generator.py by
+    flooring reward at 2.5x the warehouse diagonal.
+
+    This reruns the same scenario shape (same fleet size and arrival
+    rate as the real failing run) and checks fleet utilization --
+    fraction of robots that EVER get a task -- which is the exact
+    metric the original bug was reported against ("17/25 robots never
+    moved"), not the raw created-vs-assigned ratio: with a continuous
+    Poisson arrival process and a per-robot capacity limit
+    (FleetConfig.max_bundle=2), some queued-but-not-yet-assigned
+    backlog at any single snapshot is normal, healthy queueing
+    behavior, not starvation -- confirmed empirically (a lower
+    assignment_rate threshold here distinguishes the fixed ~40-50%
+    regime from the broken run's ~4%, while moved_fraction is the sharp
+    100% vs 24% signal)."""
+    task_events = []
+    eng = Engine(
+        config=_config(seed=1, robots=25, duration=300.0, arrival=0.5),
+        bridge=large_grid_bridge,
+        on_task_event=task_events.append,
+    )
+    eng.run()
+
+    created = [e for e in task_events if e["event"] == "task_created"]
+    assigned = [e for e in task_events if e["event"] == "task_assigned"]
+    assert len(created) > 20, f"too few tasks created to be a meaningful check: {len(created)}"
+
+    assignment_rate = len(assigned) / len(created)
+    assert assignment_rate > 0.3, (
+        f"only {len(assigned)}/{len(created)} ({assignment_rate:.0%}) tasks were ever assigned -- "
+        "matches the broken run's ~4% rate, not the fixed run's ~45%"
+    )
+
+    ever_assigned_robots = {e["robot_id"] for e in assigned}
+    moved_fraction = len(ever_assigned_robots) / len(eng.agents)
+    assert moved_fraction > 0.8, (
+        f"only {len(ever_assigned_robots)}/{len(eng.agents)} ({moved_fraction:.0%}) robots ever got a task -- "
+        "most of the fleet sat permanently IDLE (CBBA reward-floor starvation regression)"
+    )
+
+
+def test_idle_robots_never_park_inside_a_rack_aisle(medium_grid_bridge):
+    """Regression guard for the dashboard-observed deadlock: a robot with
+    no queued task stops wherever it finished its last one
+    (core/task_generator.py). Since picking pickup/dropoff cells route
+    into rack_aisle_cells (often only 1-2 cells wide), an idle robot
+    left parked there permanently blocks that aisle for everyone else --
+    Engine._nudge_out_of_aisle is supposed to relocate it the instant it
+    goes IDLE. Runs a real fleet long enough to guarantee several robots
+    go idle, and checks every single IDLE sample's cell against the
+    aisle pool."""
+    bridge = medium_grid_bridge
+    assert bridge.rack_aisle_cells, "fixture layout should have a real rack-aisle pool"
+
+    idle_samples = []
+
+    def on_sample(r):
+        if r["task_state"] == "IDLE":
+            idle_samples.append(r)
+
+    eng = Engine(
+        config=_config(duration=120.0, arrival=1.5, robots=10, seed=3),
+        bridge=bridge,
+        on_robot_sample=on_sample,
+    )
+    eng.run()
+
+    assert len(idle_samples) > 20, f"too few IDLE samples to be a meaningful check: {len(idle_samples)}"
+    stuck_in_aisle = [
+        r for r in idle_samples if bridge.world_to_cell(r["x"], r["y"]) in bridge.rack_aisle_cells
+    ]
+    assert not stuck_in_aisle, f"{len(stuck_in_aisle)}/{len(idle_samples)} IDLE samples parked inside a rack aisle"
 
 
 def test_engine_runs_without_crashing(small_bridge):

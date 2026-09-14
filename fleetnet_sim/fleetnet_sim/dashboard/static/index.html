@@ -16,6 +16,7 @@
       <button class="tab-btn" data-tab="watch">Watch</button>
       <button class="tab-btn" data-tab="runs">Run History</button>
       <button class="tab-btn" data-tab="report">Report</button>
+      <button class="tab-btn" data-tab="datasets">Datasets</button>
     </nav>
   </header>
 
@@ -157,9 +158,13 @@
 
     <section id="tab-runs" class="tab-panel">
       <h2>Run History</h2>
+      <div class="view-toolbar">
+        <button id="exportDatasetBtn" disabled>Export dataset from selected runs</button>
+        <span id="exportDatasetStatus"></span>
+      </div>
       <table id="runsTable">
         <thead>
-          <tr><th>Run ID</th><th>Layout</th><th>Status</th><th>Seed</th><th>Started</th><th>Final tick</th><th></th></tr>
+          <tr><th><input type="checkbox" id="runsSelectAll"></th><th>Run ID</th><th>Layout</th><th>Status</th><th>Seed</th><th>Started</th><th>Final tick</th><th></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -175,6 +180,42 @@
       </div>
       <div id="reportBody"></div>
     </section>
+
+    <section id="tab-datasets" class="tab-panel">
+      <div class="panel-split">
+        <div class="panel-list">
+          <h2>ML Datasets</h2>
+          <table id="datasetsTable">
+            <thead>
+              <tr><th>Model</th><th>Rows</th><th>Pos. rate</th><th>Runs</th><th>Created</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="panel-view">
+          <div id="datasetMeta" class="meta-box">Select a dataset on the left.</div>
+          <div class="view-toolbar">
+            <label>Split
+              <select id="datasetSplitFilter">
+                <option value="">all</option>
+                <option value="train">train</option>
+                <option value="val">val</option>
+                <option value="test">test</option>
+              </select>
+            </label>
+            <button id="datasetPrevBtn" disabled>&larr; Prev</button>
+            <span id="datasetPageInfo"></span>
+            <button id="datasetNextBtn" disabled>Next &rarr;</button>
+          </div>
+          <div class="wide-table-scroll">
+            <table id="datasetRowsTable">
+              <thead><tr></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <script src="/js/api.js"></script>
@@ -186,6 +227,7 @@
   <script src="/js/runHistory.js"></script>
   <script src="/js/charts.js"></script>
   <script src="/js/runReport.js"></script>
+  <script src="/js/datasetBrowser.js"></script>
   <script src="/js/main.js"></script>
 </body>
 </html>

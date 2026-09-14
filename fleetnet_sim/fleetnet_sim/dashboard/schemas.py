@@ -57,3 +57,19 @@ class GenerateStatusResponse(BaseModel):
     layout_id: Optional[str] = None
     resolved: dict = {}
     error: Optional[dict] = None
+
+
+class ExportDatasetRequest(BaseModel):
+    run_ids: list[str]
+
+
+class ExportDatasetResponse(BaseModel):
+    job_id: str
+    status: str
+
+
+class ExportDatasetStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    results: dict = {}
+    errors: dict = {}

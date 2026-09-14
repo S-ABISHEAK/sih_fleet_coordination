@@ -211,6 +211,23 @@ class Engine:
             }
         )
 
+    def _nudge_out_of_aisle(self, agent: RobotAgent) -> None:
+        """A robot that just went IDLE stops wherever it finished its
+        last task and won't move again until CBBA hands it a new one.
+        Picking pickup/dropoff cells route into WorldBridge.rack_aisle_cells
+        (often only 1-2 cells / ~2m wide -- see integration/world_bridge.py),
+        so an idle robot parked there can block that entire aisle for
+        every other robot until it gets reassigned. Snap it to the
+        nearest cell just outside the aisle instead -- a short (typically
+        1-3 cell) repositioning, not a meaningful teleport, and only
+        happens the instant a robot has no task to justify a real path."""
+        cur = agent.current_cell()
+        if cur not in self.bridge.rack_aisle_cells:
+            return
+        target = self.bridge.nearest_non_aisle_cell(cur)
+        if target != cur:
+            agent.robot.pose.x, agent.robot.pose.y = self.bridge.cell_to_world(*target)
+
     def _step_task_fsm(self, agent: RobotAgent, sim_time: float, dt: float) -> None:
         if agent.state == TaskState.IDLE:
             agent.robot.set_body_velocity(0.0, 0.0)
@@ -257,6 +274,7 @@ class Engine:
                     agent.distance_travelled = 0.0
                     agent.replan_count = 0
                     agent.state = TaskState.IDLE
+                    self._nudge_out_of_aisle(agent)
 
     # ------------------------------------------------------------------
     # Motion
@@ -354,6 +372,7 @@ class Engine:
                     agent.path = []
                     agent.unreachable_timer = 0.0
                     agent.state = TaskState.IDLE
+                    self._nudge_out_of_aisle(agent)
                     self._reannounce(old_task, exclude=agent, sim_time=sim_time)
 
         # --- congestion detour ---

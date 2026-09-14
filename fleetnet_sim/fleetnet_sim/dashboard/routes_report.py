@@ -12,6 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import text
 
+from fleetnet_sim.dashboard.db_session import db_session
 from fleetnet_sim.storage.models import RunMetrics, SimulationRun
 
 router = APIRouter()
@@ -82,28 +83,28 @@ def _trajectories(session, run_id: str) -> dict:
 
 @router.get("/runs/{run_id}/report")
 def get_run_report(run_id: str, request: Request):
-    session = request.app.state.session_factory()
-    run = session.get(SimulationRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail=f"no such run_id: {run_id!r}")
-    rm = session.get(RunMetrics, run_id)
+    with db_session(request) as session:
+        run = session.get(SimulationRun, run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"no such run_id: {run_id!r}")
+        rm = session.get(RunMetrics, run_id)
 
-    return {
-        "run_id": run.run_id,
-        "experiment_id": run.experiment_id,
-        "layout_id": run.layout_id,
-        "layout_path": run.layout_path,
-        "seed": run.seed,
-        "dt": run.dt,
-        "status": run.status,
-        "started_at": run.started_at,
-        "finished_at": run.finished_at,
-        "final_tick": run.final_tick,
-        "config": run.config_json,
-        "metrics": rm.metrics_json if rm else None,
-        "task_timeline": _cumulative_task_completions(session, run_id),
-        "conflict_timeline": _timeline(session, "conflict_events", run_id),
-        "congestion_timeline": _timeline(session, "congestion_events", run_id),
-        "replan_timeline": _timeline(session, "route_events", run_id),
-        "trajectories": _trajectories(session, run_id),
-    }
+        return {
+            "run_id": run.run_id,
+            "experiment_id": run.experiment_id,
+            "layout_id": run.layout_id,
+            "layout_path": run.layout_path,
+            "seed": run.seed,
+            "dt": run.dt,
+            "status": run.status,
+            "started_at": run.started_at,
+            "finished_at": run.finished_at,
+            "final_tick": run.final_tick,
+            "config": run.config_json,
+            "metrics": rm.metrics_json if rm else None,
+            "task_timeline": _cumulative_task_completions(session, run_id),
+            "conflict_timeline": _timeline(session, "conflict_events", run_id),
+            "congestion_timeline": _timeline(session, "congestion_events", run_id),
+            "replan_timeline": _timeline(session, "route_events", run_id),
+            "trajectories": _trajectories(session, run_id),
+        }

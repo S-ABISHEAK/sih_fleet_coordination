@@ -6,6 +6,8 @@ by the same ``task_id``, owned entirely by our telemetry layer.
 """
 from __future__ import annotations
 
+import math
+
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
@@ -15,6 +17,23 @@ from core.world import Cell
 
 from fleetnet_sim.config.schema import TaskGenConfig
 from fleetnet_sim.integration.world_bridge import WorldBridge
+
+# CBBA (Fleet_SIH/core/allocation/cbba.py::try_build_bundle) only accepts a
+# task if score > current_best_bid, and current_best_bid defaults to 0.0
+# (not -inf) -- so a task whose score is <= 0 for every single agent is
+# silently, permanently unwinnable (no exception, no event). For an idle
+# robot (empty route), score = reward - (dist(robot, pickup) +
+# dist(pickup, dropoff)), and both distance terms are individually bounded
+# by the warehouse footprint's own diagonal D. A flat reward (e.g. the
+# 100.0 default) comfortably exceeds this on small/medium layouts but is
+# far smaller than 2*D on LARGE/VERY_LARGE ones (diagonal ~450m at
+# 100,000 m^2) -- confirmed as the root cause of a real run where 180/187
+# tasks never got assigned and 17/25 robots never moved. reward > 2*D
+# algebraically guarantees a strictly positive score is achievable by at
+# least one idle robot for every task, regardless of scale; 2.5x gives
+# headroom over the exact boundary for the strict `>` comparison and any
+# route-restructuring cost on a robot with a non-empty bundle.
+REWARD_FLOOR_FACTOR = 2.5
 
 # (source_zone_type, destination_zone_type, relative_weight) — Section 15's
 # standard flow, plus returns/charging as lower-weight alternates so traffic
@@ -55,6 +74,11 @@ class TaskGenerator:
     config: TaskGenConfig
     rng: np.random.Generator
     _next_id: int = field(default=0)
+    _reward_floor: float = field(init=False, default=0.0)
+
+    def __post_init__(self) -> None:
+        diagonal_m = math.hypot(self.bridge.world.width, self.bridge.world.height) * self.bridge.cell_size
+        self._reward_floor = REWARD_FLOOR_FACTOR * diagonal_m
 
     def maybe_generate(self, sim_time: float, dt: float, active_task_count: int) -> Optional[tuple[Task, TaskRecord]]:
         if self.config.max_active_tasks is not None and active_task_count >= self.config.max_active_tasks:
@@ -93,7 +117,8 @@ class TaskGenerator:
         pickup = self._pick_cell(src_zone)
         dropoff = self._pick_cell(dst_zone)
 
-        task = Task(task_id=task_id, pickup=pickup, dropoff=dropoff, reward=self.config.reward, created_tick=0)
+        reward = max(self.config.reward, self._reward_floor)
+        task = Task(task_id=task_id, pickup=pickup, dropoff=dropoff, reward=reward, created_tick=0)
         record = TaskRecord(
             task_id=task_id,
             task_type=f"{src_zone}_to_{dst_zone}",

@@ -114,3 +114,9 @@ canvas { background: white; border: 1px solid #d8dce1; border-radius: 4px; }
   .report-section, .report-header { border: none; box-shadow: none; break-inside: avoid; }
   .kpi-grid { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* -- Datasets tab -- */
+.wide-table-scroll { overflow-x: auto; background: white; border: 1px solid #d8dce1; border-radius: 4px; margin-top: 0.5rem; }
+.wide-table-scroll table { width: max-content; min-width: 100%; }
+.wide-table-scroll th, .wide-table-scroll td { white-space: nowrap; font-size: 0.78rem; }
+#datasetPageInfo { font-size: 0.85rem; color: #667; }
