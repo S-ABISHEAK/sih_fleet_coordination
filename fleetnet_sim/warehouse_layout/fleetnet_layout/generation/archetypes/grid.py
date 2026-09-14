@@ -23,6 +23,12 @@ import numpy as np
 
 from fleetnet_layout.config.schema import LayoutConfig
 from fleetnet_layout.generation.archetypes.base import (
+    INBOUND_ZONES as _INBOUND,
+)
+from fleetnet_layout.generation.archetypes.base import (
+    OUTBOUND_ZONES as _OUTBOUND,
+)
+from fleetnet_layout.generation.archetypes.base import (
     finalize_one_way,
     generate_column_grid,
     opposite_wall,
@@ -34,9 +40,6 @@ from fleetnet_layout.generation.storage import build_storage_field
 from fleetnet_layout.generation.types import LayoutBuildResult
 from fleetnet_layout.generation.zones import pack_zone_band
 from fleetnet_layout.geometry.primitives import Rect
-
-_INBOUND = ["receiving", "staging", "picking"]
-_OUTBOUND = ["shipping", "packing", "returns", "charging", "office"]
 
 
 def build(rng: np.random.Generator, cfg: LayoutConfig) -> LayoutBuildResult:

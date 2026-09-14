@@ -24,6 +24,13 @@ from fleetnet_layout.generation.types import LayoutBuildResult
 from fleetnet_layout.generation.zones import pack_zone_band
 from fleetnet_layout.geometry.primitives import Rect
 
+# Shared inbound/outbound zone split used by every archetype that places
+# receiving and shipping on opposite walls (grid, flow_through,
+# zone_based, u_flow, l_flow) -- see reserve_zone_band's docstring and
+# grid.py's module docstring for why opposite walls matter for routing.
+INBOUND_ZONES = ["receiving", "staging", "picking"]
+OUTBOUND_ZONES = ["shipping", "packing", "returns", "charging", "office"]
+
 
 def reserve_zone_band(footprint: Rect, wall: DockWall, depth_m: float) -> tuple[Rect, Rect]:
     """Split the footprint into a zone band against ``wall`` (depth

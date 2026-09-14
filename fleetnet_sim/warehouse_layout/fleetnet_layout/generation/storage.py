@@ -77,7 +77,12 @@ def build_storage_field(
     blocks = fit_segments(
         block_axis_len, storage_cfg.block_count, item_size=max(block_axis_len / max(storage_cfg.block_count, 1), RACK_ROW_DEPTH_M), gap_size=main_w
     )
-    rows_per_block = max(1, storage_cfg.rack_row_count // max(blocks.count, 1))
+    # Floored at 2, not 1: fit_segments(target_count=1) always returns a
+    # single segment with no internal gap, so a block with rows_per_block
+    # == 1 gets zero secondary aisles -- picking tasks then have nowhere
+    # to route through and fall back to the raw zone band (see
+    # TaskGenerator._cells_for). At least 2 guarantees >= 1 gap per block.
+    rows_per_block = max(2, storage_cfg.rack_row_count // max(blocks.count, 1))
 
     # Spine aisles run along BOTH ends of the depth axis, connecting
     # every picking aisle to the main network regardless of which end

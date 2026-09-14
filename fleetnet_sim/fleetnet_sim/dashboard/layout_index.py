@@ -16,8 +16,8 @@ import json
 from pathlib import Path
 
 DEFAULT_LAYOUT_DIRS = [
-    "../warehouse_layout/outputs/layouts",
-    "../warehouse_layout/outputs/layouts_batch",
+    "warehouse_layout/outputs/layouts",
+    "warehouse_layout/outputs/layouts_batch",
 ]
 
 

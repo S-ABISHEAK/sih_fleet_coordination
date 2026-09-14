@@ -19,17 +19,19 @@ python3.12 -m venv .venv
 docker compose up -d          # starts TimescaleDB on localhost:5432
 ```
 
-`Fleet_SIH` and `warehouse_layout` must be sibling directories of this
-package (as they already are) — `fleetnet_sim/_paths.py` bootstraps
-`Fleet_SIH/core` onto `sys.path` automatically; set `FLEET_SIH_ROOT` if
-your checkout is laid out differently.
+`Fleet_SIH` must be a sibling directory of this package (as it already
+is) — `fleetnet_sim/_paths.py` bootstraps `Fleet_SIH/core` onto
+`sys.path` automatically; set `FLEET_SIH_ROOT` if your checkout is laid
+out differently. `warehouse_layout` lives nested at
+`fleetnet_sim/warehouse_layout/` and is installed as an editable
+dependency straight from there (see `pyproject.toml`).
 
 ## Quick start
 
 ```bash
 # One run against an already-generated layout:
 .venv/bin/python -m fleetnet_sim simulate \
-    --layout ../warehouse_layout/outputs/layouts/2_medium_grid.json \
+    --layout warehouse_layout/outputs/layouts/2_medium_grid.json \
     --robots 15 --seed 1 --duration 300 --arrival-rate 0.5
 
 # Inspect it later:
@@ -42,7 +44,7 @@ your checkout is laid out differently.
 # Many runs (layouts x seeds x robot counts) in one command, for a real
 # training corpus — every layout in a directory, 2 seeds, 2 fleet sizes:
 .venv/bin/python -m fleetnet_sim batch \
-    --layouts ../warehouse_layout/outputs/layouts \
+    --layouts warehouse_layout/outputs/layouts \
     --seeds 0-9 --robots 10,15,20 \
     --duration 300 --arrival-rate 0.6 \
     --export-datasets eta,conflict,congestion

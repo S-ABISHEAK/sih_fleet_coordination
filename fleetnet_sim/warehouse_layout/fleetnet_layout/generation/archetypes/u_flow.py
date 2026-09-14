@@ -1,10 +1,11 @@
-"""U-flow archetype (Section B): receiving and shipping on the *same*
-wall; storage sits between them and flow loops around the storage
-block's far end. The structural signature that distinguishes this from
-`grid` is the perimeter loop aisle: a main-aisle-width strip wrapping the
-far wall and both side walls of the storage field, connecting back to
-the dock wall on either side so the aisle network forms a loop rather
-than a simple comb.
+"""U-flow archetype (Section B): receiving and shipping on opposite
+walls (inbound band on the dock wall, outbound band on the far wall,
+same split `grid.py` uses); storage sits between them and flow loops
+around the storage block's far end. The structural signature that
+distinguishes this from `grid` is the perimeter loop aisle: a
+main-aisle-width strip wrapping the far wall and both side walls of the
+storage field, connecting back to the dock wall on either side so the
+aisle network forms a loop rather than a simple comb.
 """
 from __future__ import annotations
 
@@ -12,6 +13,12 @@ import numpy as np
 
 from fleetnet_layout.config.enums import ArchetypeRole
 from fleetnet_layout.config.schema import LayoutConfig
+from fleetnet_layout.generation.archetypes.base import (
+    INBOUND_ZONES as _INBOUND,
+)
+from fleetnet_layout.generation.archetypes.base import (
+    OUTBOUND_ZONES as _OUTBOUND,
+)
 from fleetnet_layout.generation.archetypes.base import (
     finalize_one_way,
     opposite_wall,
@@ -30,11 +37,19 @@ def build(rng: np.random.Generator, cfg: LayoutConfig) -> LayoutBuildResult:
     wall = cfg.structural_constraints.dock_wall
     far_wall = opposite_wall(wall)
 
-    enabled_zone_area = sum(getattr(cfg.zones, name).area_m2 for name in type(cfg.zones).model_fields if getattr(cfg.zones, name).enabled)
-    band_depth = max(min(enabled_zone_area / footprint.w, footprint.h * 0.3), 8.0)
+    zones = cfg.zones
+    inbound_area = sum(getattr(zones, n).area_m2 for n in _INBOUND if getattr(zones, n).enabled)
+    outbound_area = sum(getattr(zones, n).area_m2 for n in _OUTBOUND if getattr(zones, n).enabled)
 
-    zone_band, storage_rect = reserve_zone_band(footprint, wall, band_depth)
-    zone_result = pack_zone_band(zone_band, cfg.zones, id_prefix="z0")
+    inbound_depth = max(min(inbound_area / footprint.w, footprint.h * 0.25), 6.0)
+    outbound_depth = max(min(outbound_area / footprint.w, footprint.h * 0.25), 6.0)
+
+    inbound_band, remainder = reserve_zone_band(footprint, wall, inbound_depth)
+    outbound_band, storage_rect = reserve_zone_band(remainder, far_wall, outbound_depth)
+
+    inbound_zones = pack_zone_band(inbound_band, zones, id_prefix="in", order=_INBOUND)
+    outbound_zones = pack_zone_band(outbound_band, zones, id_prefix="out", order=_OUTBOUND)
+    zone_result_zones = inbound_zones.zones + outbound_zones.zones
 
     from fleetnet_layout.generation.sampling import aisle_width_m
 
@@ -77,13 +92,14 @@ def build(rng: np.random.Generator, cfg: LayoutConfig) -> LayoutBuildResult:
     racks = apply_subtractive_layer(field.racks, columns)
 
     docks: list = []
-    for z in zone_result.zones:
+    for z in zone_result_zones:
         zt = z.metadata["zone_type"]
         if zt not in ("receiving", "shipping"):
             continue
+        w = wall if zt == "receiving" else far_wall
         minx, miny, maxx, maxy = z.polygon.bounds
         zr = Rect(minx, miny, maxx - minx, maxy - miny)
-        docks += sample_and_place_docks(rng, zr, wall, cfg, role=zt, id_prefix=zt)
+        docks += sample_and_place_docks(rng, zr, w, cfg, role=zt, id_prefix=zt)
 
     result = LayoutBuildResult(
         footprint=footprint,
@@ -91,7 +107,7 @@ def build(rng: np.random.Generator, cfg: LayoutConfig) -> LayoutBuildResult:
         main_aisles=field.main_aisles + loop_aisles,
         secondary_aisles=field.secondary_aisles,
         cross_aisles=field.cross_aisles,
-        zones=zone_result.zones,
+        zones=zone_result_zones,
         docks=docks,
         columns=columns,
     )

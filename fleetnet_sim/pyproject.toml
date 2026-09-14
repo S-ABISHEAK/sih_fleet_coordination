@@ -21,7 +21,7 @@ dependencies = [
     "pillow>=10.0",
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
-    "fleetnet-layout @ file:../warehouse_layout",
+    "fleetnet-layout @ file:./warehouse_layout",
 ]
 
 [project.optional-dependencies]

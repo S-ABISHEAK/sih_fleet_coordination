@@ -8,12 +8,13 @@ every internal import inside ``Fleet_SIH/core/*.py`` itself, e.g.
 onto ``sys.path`` once, at import time, before any ``fleetnet_sim``
 module tries ``import core...``.
 
-Layout assumed (sibling directories under one parent, as the user's
-actual environment has them):
+Layout assumed (Fleet_SIH a sibling directory, as the user's actual
+environment has it -- warehouse_layout lives nested inside
+fleetnet_sim/ instead and isn't relevant to this bootstrap):
     edge_ai/
-      Fleet_SIH/        <- untouched, contains core/
-      warehouse_layout/
-      fleetnet_sim/     <- this package
+      Fleet_SIH/          <- untouched, contains core/
+      fleetnet_sim/       <- this package
+        warehouse_layout/
 
 If ``FLEET_SIH_ROOT`` is set in the environment, that path is used
 instead (for a different checkout location).
